@@ -61,12 +61,15 @@ char *read_line(char *line){
 int execute_line(char *line){
     char *token[COMMAND_LINE_SIZE];
     int numOfTokens = parse_args(token, line);
-    size_t i = 0;
-    while (*(token+i) != NULL){
-        printf("[%ld]%s\t", i, *(token + i));
-        i++;
+    if (numOfTokens > 0){
+        /* code */
     }
-    printf("[%ld]%s\t", i, *(token + i));
+    
+    size_t i = 0;                               //TEMP
+    while (*(token+i) != NULL){                 //TEMP
+        printf("[%ld]%s\t", i, *(token + i));   //TEMP
+        i++;                                    //TEMP
+    }                                           //TEMP
     //int isinternal = check_internal(token);
     return 0;
 }
