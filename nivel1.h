@@ -1,8 +1,10 @@
+#define _POSIX_C_SOURCE 200112L
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
 
+#define ARGS_SIZE 64
 #define COMMAND_LINE_SIZE 1024
 #define PROMPT  '$'
 #define HASH    '#'
@@ -25,6 +27,9 @@
 #define CYAN_F "\x1b[46m"
 #define BLANCO_T "\x1b[37m"
 #define BLANCO_F "\x1b[47m"
+#define VERDEF_T "\x1b[32;1m"
+#define ROJOF_T "\x1b[31;1m"
+
 char *execHasMade = AMARILLO_T;
 char *read_line(char *line);
 int execute_line(char *line);
