@@ -1,5 +1,6 @@
-#include "nivel1.h"
+#include "nivel2.h"
 
+char prompt[COMMAND_LINE_SIZE];
 char *execHasMade = AMARILLO_T;
 int main(){
     char line[COMMAND_LINE_SIZE]; //1024
@@ -15,10 +16,11 @@ int main(){
 /**
  * Devuelve el puntero de PWD con el string modificado, indicando en que directorio estas.
  * */
-char *getDirectory(){
+void getDirectory(){
     char *fullPath = getenv("PWD");
     char result[COMMAND_LINE_SIZE];
-    size_t lenPath = strlen(fullPath);
+    getcwd(prompt, COMMAND_LINE_SIZE);
+    /**size_t lenPath = strlen(fullPath);
     size_t cnt = lenPath;
     size_t i = 0;
     --cnt;
@@ -35,16 +37,15 @@ char *getDirectory(){
         }
         result[i] = '\0';
         strcpy(fullPath, result);
-    }
-    return fullPath;
+    }*/
 }
 
 /**
  * Imprime el prompt.
  * */
 void imprimir_prompt(){
-    char *path = getDirectory();
-    printf("%s»"RESET_COLOR VERDE_T "%s " AZUL_T "%c" RESET_COLOR ": ",execHasMade, path, PROMPT);
+    getDirectory();
+    printf("%s»"RESET_COLOR VERDE_T "%s " AZUL_T "%c" RESET_COLOR ": ",execHasMade, prompt, PROMPT);
     fflush(stdout);
 }
 
@@ -79,6 +80,9 @@ int execute_line(char *line){
     return 0;
 }
 
+/**
+ * Procesa la linea de comando escrita, troceandola por tokens y devuelve el numero de tokens.
+ * */
 int parse_args(char **args, char *line){
     int numOfargss = 0;
     char *tempToken;
@@ -91,7 +95,9 @@ int parse_args(char **args, char *line){
     *(args +numOfargss) = NULL;
     return numOfargss;
 }
-
+/**
+ * Verifica si el cmd es interno o no, y en caso de serlo, lo ejecuta.
+ * */
 int check_internal(char **args){
     char *intern_cmd[] = {"exit","cd","export","source","jobs","fg","bg"};  //Array de comandos internos
     int n_of_cmds = 7;                                                      //Tamaño del array
@@ -134,9 +140,44 @@ int check_internal(char **args){
 /**
  * Cambia el directorio en el cual se haya el usuario.
  * */
-int internal_cd(char **args){
-    puts("La funcion cd cambia el directorio en el cual se situa actualmente");
+int internal_cd(char **args){ //TESTING TIME
+    char path[PATHSIZE];
+    if (args[1] != NULL){
+        char *hasDelimiters;
+        if(hasDelimiters = strtok(args[1],ADVCD)){      //Observamos si contiene algun delimitador
+            strcpy(path,hasDelimiters);                 //Copiamos la palabra al path
+            if (hasDelimiters = strtok(NULL,ADVCD)){    //En caso de que la palabra contenga algun otro delimitador, concatenamos 
+                                                        //su contenido con lo que hay en el path.
+                strcat(path, hasDelimiters);
+            }
+            advanced_cd(path,args);                     //Pasamos a advanced_cd, donde lee el resto
+        }
+    }else{
+        strcpy(path,getenv("HOME"));
+    }
+    if (chdir(path)){                                   //Intentamos cambiar el path.
+        perror("chdir :");
+        printf("%s\n",path);
+    }
     return 1;
+}
+/**
+ * Funcion complementaria a internal_cd que concatena los tokens 
+ * */
+void advanced_cd(char *path,char **args){
+    size_t cntArgs = 2;
+    char *word;
+    while (args[cntArgs] != NULL){                  //Mientras no lleguemos al final de los tokens
+        word = strtok(args[cntArgs], ADVCD);        //
+        strcat(path," ");                           //Concatenamos el nombre del directorio sin los delimitadores al path.
+        strcat(path, word);                         //
+        word = strtok(NULL,ADVCD);                  //
+        while(word){                                //En caso de que un token contenga mas palabras en el token despues
+            strcat(path,word);                      //del delimitador, lo concatenamos al path.
+            word = strtok(NULL,ADVCD);              //
+        }
+        cntArgs++;
+    }
 }
 
 /**
@@ -144,7 +185,24 @@ int internal_cd(char **args){
  * En caso de tener parametros, modifica o crea una variable de entorno y le añade contenido. 
  * */
 int internal_export(char **args){
-    puts("La funcion export sin parametros muestra todas las variables de entorno, con parametro crea o cambia la variable");
+    printf("I'm here!\n");
+    char *value;
+    char *name;
+    if (args[1] != NULL){
+        name = strtok(args[1], EQUAL);
+        if (name == NULL){
+            name = "";
+        }
+        value = strtok(NULL," ");
+        if (value == NULL){
+            value = "";
+        }
+    }
+    printf("Before: %s=%s",name,getenv(name));
+    if (value=="" || name=="" || setenv(name, value, 1)){
+        fprintf(stderr, "Error de sintaxis. Uso: Nombre=Valor");
+    }
+    printf("After: %s=%s",name, getenv(name));
     return 1;
 }
 

@@ -30,7 +30,6 @@
 #define VERDEF_T "\x1b[32;1m"
 #define ROJOF_T "\x1b[31;1m"
 
-char *execHasMade = AMARILLO_T;
 char *read_line(char *line);
 int execute_line(char *line);
 int parse_args(char **args, char *line);
