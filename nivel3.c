@@ -1,4 +1,4 @@
-#include "nivel2.h"
+#include "nivel3.h"
 
 char prompt[COMMAND_LINE_SIZE];
 char *execHasMade = AMARILLO_T;
@@ -6,9 +6,12 @@ int main(){
     char line[COMMAND_LINE_SIZE]; //1024
     while (1){
         if (read_line(line) && strlen(line) > 0){
-            execute_line(line);                     //Hacer checking de si la instr. se ejecutó
+            if(execute_line(line)){
+                execHasMade = ROJOF_T;
+            }else{
+                execHasMade = VERDEF_T;
+            }
         }
-        execHasMade = VERDEF_T;
     }
     return 1;
 }
@@ -17,27 +20,16 @@ int main(){
  * Devuelve el puntero de PWD con el string modificado, indicando en que directorio estas.
  * */
 void getDirectory(){
-    char *fullPath = getenv("PWD");
-    char result[COMMAND_LINE_SIZE];
     getcwd(prompt, COMMAND_LINE_SIZE);
-    /**size_t lenPath = strlen(fullPath);
-    size_t cnt = lenPath;
-    size_t i = 0;
-    --cnt;
-    while (*(fullPath+cnt) != '/' && cnt > 0){  //Busca el incio del directorio actual
-        --cnt;
+    int plength = strlen(prompt);
+    int actdirect = plength-1;
+    while (*(prompt + actdirect) != '/' && actdirect > 0){
+        actdirect--;
     }
-    if (*(fullPath+cnt) == '/'){                //Copia el directorio actual
-        cnt++;
-        while (cnt < strlen(fullPath))
-        {
-            result[i] = *(fullPath + cnt);
-            cnt++;
-            i++;
-        }
-        result[i] = '\0';
-        strcpy(fullPath, result);
-    }*/
+    if (*(prompt + actdirect) == '/'){
+        actdirect++;
+        strcpy(prompt,(prompt+actdirect));
+    }
 }
 
 /**
@@ -45,7 +37,7 @@ void getDirectory(){
  * */
 void imprimir_prompt(){
     getDirectory();
-    printf("%s»"RESET_COLOR VERDE_T "%s " AZUL_T "%c" RESET_COLOR ": ",execHasMade, prompt, PROMPT);
+    printf("%s➤ " RESET_COLOR VERDE_T "%s " AZUL_T "%c" RESET_COLOR ": ", execHasMade, prompt, PROMPT);
     fflush(stdout);
 }
 
@@ -54,10 +46,11 @@ void imprimir_prompt(){
  * */
 char *read_line(char *line){
     imprimir_prompt();
-    fgets(line, COMMAND_LINE_SIZE, stdin);
-    if (line == NULL){ //Looking for condition
-        puts("readline: error al leer el string introducido");
-        return NULL;
+    if(!fgets(line, COMMAND_LINE_SIZE, stdin)){
+        if (feof(stdin)){
+            puts("\nCTRL+D pressed");
+            exit(0);
+        }
     }
     return line;
 }
@@ -69,13 +62,31 @@ int execute_line(char *line){
     char *args[ARGS_SIZE];                      //Array de punteros de tokens
     int numOfargss = parse_args(args, line);    //Troceamos la linea de cmd y lo almacenamos en el puntero de tokens
     if (numOfargss > 0){                        //Si hay tokens, tratamos de ejecutarlo
-        size_t i = 0;                               //TEMP
-        while (*(args + i) != NULL){                //TEMP
-            printf("[%ld]%s\t", i, *(args + i));    //TEMP
-            i++;                                    //TEMP
+        if(!check_internal(args)){
+            int status;
+            pid_t cpid = fork();
+            if (cpid < 0){
+                perror("fork ");
+            }else if(cpid > 0){
+                printf("Soy el padre y mi pid es:%d\n", getpid());
+                while (wait(&status) != cpid);
+                if(WIFEXITED(status)){
+                    printf("\nchild exit %d\n",WEXITSTATUS(status));
+                    return(WEXITSTATUS(status));
+                }
+                else if (WIFSIGNALED(status)){
+                    printf("\nchild process finalized with a signal: %d", WTERMSIG(status));
+                }
+            }else{
+                printf("Soy el hijo y mi pid es: %d\n", getpid());
+                if (execvp(args[0], args)){
+                    perror("execvp");
+                    exit(EXIT_FAILURE);
+                }
+                exit(EXIT_SUCCESS);
+            }
+            
         }
-        printf("[%ld]%s\t\n", i, *(args + i));      //TEMP
-        check_internal(args);
     }
     return 0;
 }
@@ -131,9 +142,6 @@ int check_internal(char **args){
         }
         
     }
-    if (is_not_internal){
-        printf("\nNo es un cmd interno\n");
-    }
     return 0;
 }
 
@@ -143,38 +151,39 @@ int check_internal(char **args){
 int internal_cd(char **args){ //TESTING TIME
     char path[PATHSIZE];
     if (args[1] != NULL){
-        char *hasDelimiters;
-        if(hasDelimiters = strtok(args[1],ADVCD)){      //Observamos si contiene algun delimitador
-            strcpy(path,hasDelimiters);                 //Copiamos la palabra al path
-            if (hasDelimiters = strtok(NULL,ADVCD)){    //En caso de que la palabra contenga algun otro delimitador, concatenamos 
-                                                        //su contenido con lo que hay en el path.
-                strcat(path, hasDelimiters);
-            }
-            advanced_cd(path,args);                     //Pasamos a advanced_cd, donde lee el resto
-        }
+        advanced_cd(path,args);
     }else{
         strcpy(path,getenv("HOME"));
     }
     if (chdir(path)){                                   //Intentamos cambiar el path.
-        perror("chdir :");
+        perror("chdir");
         printf("%s\n",path);
     }
     return 1;
 }
 /**
- * Funcion complementaria a internal_cd que concatena los tokens 
+ * Funcion complementaria a internal_cd que concatena los tokens.
+ * También es utilizada en el source para concatenar los path.
  * */
 void advanced_cd(char *path,char **args){
-    size_t cntArgs = 2;
-    char *word;
+    char *hasDelimiters;
+    size_t cntArgs = 1;
+    if (hasDelimiters = strtok(args[cntArgs], ADVCD)){    //Observamos si contiene algun delimitador
+        strcpy(path, hasDelimiters);                //Copiamos la palabra al path
+        if (hasDelimiters = strtok(NULL, ADVCD)){   //En caso de que la palabra contenga algun otro delimitador, concatenamos
+                                                    //su contenido con lo que hay en el path.
+            strcat(path, hasDelimiters);
+        }
+    }
+    cntArgs++;
     while (args[cntArgs] != NULL){                  //Mientras no lleguemos al final de los tokens
-        word = strtok(args[cntArgs], ADVCD);        //
+        hasDelimiters = strtok(args[cntArgs], ADVCD);        //
         strcat(path," ");                           //Concatenamos el nombre del directorio sin los delimitadores al path.
-        strcat(path, word);                         //
-        word = strtok(NULL,ADVCD);                  //
-        while(word){                                //En caso de que un token contenga mas palabras en el token despues
-            strcat(path,word);                      //del delimitador, lo concatenamos al path.
-            word = strtok(NULL,ADVCD);              //
+        strcat(path, hasDelimiters);                         //
+        hasDelimiters = strtok(NULL,ADVCD);                  //
+        while(hasDelimiters){                                //En caso de que un token contenga mas palabras en el token despues
+            strcat(path,hasDelimiters);                      //del delimitador, lo concatenamos al path.
+            hasDelimiters = strtok(NULL,ADVCD);              //
         }
         cntArgs++;
     }
@@ -208,7 +217,29 @@ int internal_export(char **args){
 /**
  * */
 int internal_source(char **args){
-    puts("La funcion source llama a un script para ejecutarlo seguidamente");
+    char path[COMMAND_LINE_SIZE];
+    strcpy(path,args[1]);
+    advanced_cd(path,args);
+    FILE *fd = fopen(path,"r");
+    char buff[COMMAND_LINE_SIZE];
+    if (fd > 0){
+        int cnt = 0;
+        while(fgets(buff,COMMAND_LINE_SIZE,fd) > 0){
+            fflush(fd);
+            printf("%s:[line %d] %s\n",path,cnt, buff);
+            fflush(stdout);
+            execute_line(buff);
+            cnt++;
+        }
+        if(fclose(fd) != 0){
+            perror("fclose");
+        }
+    }else{
+        perror("fopen");
+        puts("Sintaxis del source: source <filename that exists>");
+    }
+    
+    
     return 1;
 }
 
