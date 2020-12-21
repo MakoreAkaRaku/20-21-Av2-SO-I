@@ -92,8 +92,8 @@ int execute_line(char *line){
                 perror("fork ");
             }else if(cpid > 0){ //Codigo del proceso padre.
                 int status = 0;
-                printf("Soy el padre y mi pid es:%d\n", getpid());
-                if (!isbkg){
+                //printf("Soy el padre y mi pid es:%d\n", getpid());
+                if (isbkg != 1){
                     jobs_list[0].pid = cpid;
                     jobs_list[0].status = 'E';
                     strcpy(jobs_list[0].cmd, cmdLine);
@@ -108,7 +108,7 @@ int execute_line(char *line){
                 signal(SIGCHLD,SIG_DFL);
                 signal(SIGINT,SIG_IGN);
                 signal(SIGTSTP,SIG_IGN);
-                printf("Soy el hijo y mi pid es: %d\n", getpid());
+                //printf("\nSoy el hijo y mi pid es: %d\n", getpid());
                 if (execvp(args[0], args)){
                     perror("execvp");
                     exit(EXIT_FAILURE);
@@ -235,11 +235,9 @@ int internal_export(char **args){
             value = "";
         }
     }
-    printf("Before: %s=%s",name,getenv(name));
     if (value=="" || name=="" || setenv(name, value, 1)){
-        fprintf(stderr, "Error de sintaxis. Uso: Nombre=Valor");
+        fprintf(stderr, "Error de sintaxis. Uso: Nombre=Valor\n");
     }
-    printf("After: %s=%s",name, getenv(name));
     return 1;
 }
 
@@ -275,24 +273,72 @@ int internal_source(char **args){
 /**
  * */
 int internal_jobs(char **args){
-    printf("\tNº\tPID\tSTATUS\tCMDLINE\n");
+    printf("\t Nº\tPID\tSTATUS\tCMDLINE\n");
     for (size_t i = 0; i < n_pids; i++){
-        printf("\t%ld\t%d\t%c\t%s\n",i,jobs_list[i].pid,jobs_list[i].status,jobs_list[i].cmd);
+        printf("\t[%ld]\t%d\t   %c\t%s",i, jobs_list[i].pid,jobs_list[i].status,jobs_list[i].cmd);
+        if (i < n_pids){
+            printf("\n");
+        }
     }
+    
     return 1;
 }
 
 /**
  * */
 int internal_fg(char **args){
-    puts("La funcion fg pone el proceso en primer plano");
+    if (args[1] != NULL){               //Si el token no está vacio, continuamos
+        int pos;
+        char *c = strchr(args[1], '\%');
+        if (c != NULL){                 //Si contiene % entonces lo tratamos
+            pos = atoi(c+1);
+        }else{                          //En caso contrario, seguimos como si fuese un numero
+            pos = atoi(args[1]);   
+        }
+        if (pos >= n_pids || pos <= 0){
+            perror("No existe el trabajo");
+            return 1;
+        }
+        if (jobs_list[pos].status =='D'){
+            kill(jobs_list[pos].pid, SIGCONT);
+        }
+        c = strtok(jobs_list[pos].cmd,"&");
+        strcpy(jobs_list[pos].cmd,c);
+        jobs_list[0] = jobs_list[pos];
+        jobs_list_remove(pos);
+        while (jobs_list[0].pid > 0){
+            pause();
+        }
+        
+    }else{
+        perror("Faltan argumentos. Syntaxis: fg %<numproceso> o <num del trabajo>");
+    }
     return 1;
 }
 
 /**
  * */
 int internal_bg(char **args){
-    puts("La funcion bg pone el proceso en segundo plano, dejando libre la terminal para uso de otra funcion");
+    if (args[1] != NULL){
+        char *c=strchr(args[1],'\%');
+        int pos;
+        if (c != NULL){
+            pos = atoi(c+1);
+        }else{
+            pos = atoi(args[1]);
+        }
+        if(pos < n_pids && pos >= 0){
+            if (jobs_list[pos].status == 'D'){  //Si el estado del
+                printf("[%d] con pid %d status %c y cmd %s puesto en ejecucion\n", pos, jobs_list[pos].pid, jobs_list[pos].status, jobs_list[pos].cmd);
+                jobs_list[pos].status = 'E';
+                kill(jobs_list[pos].pid,SIGCONT);
+            }else{
+                printf("El proceso ya esta en ejecucion\n");
+            }
+        }else{
+            perror("Error, sintaxis correcta; bg \%<num del trabajo> o <num del trabajo>");
+        }
+    }
     return 1;
 }
 
@@ -300,28 +346,25 @@ void reaper(int signum){
     signal(SIGCHLD,reaper);
     pid_t p_ended;
     int status;     //Usado para almacenar el estatus del hijo.
-    while ((p_ended = waitpid(-1,&status,WNOHANG)) > 0);
-    if(p_ended == -1){                                      //En caso de que la espera del proceso hijo falle
-        perror("La espera del proceso falló...");
-    }else if (jobs_list[0].pid == p_ended){                 //En caso de que el proceso hijo esté en foreground.
-        jobs_list[0].pid = 0;
-        strcpy(jobs_list[0].cmd, "");
-        jobs_list[0].status = 'F';
-    }else{                                                  //En caso de que el proceso hijo esté en background.
-        int site = jobs_list_find(p_ended);
-        if (site != -1){
-            if(jobs_list_remove(site)){
-                perror("El proceso no se ha removido");
-            }else{
-                if (WIFEXITED(status)){
-                    printf("Child finished his work by exit: result of exit: %d and pid is:%d\n", WEXITSTATUS(status), jobs_list[0].pid);
-                }
-                else if (WIFSIGNALED(status)){
-                    printf("Child finished his process by a signal: result of signal: %d and pid is: %d\n", WTERMSIG(status), jobs_list[0].pid);
-                }
+    while ((p_ended = waitpid(-1,&status,WNOHANG)) > 0){
+        if (p_ended == jobs_list[0].pid){   //En caso de que el proceso terminado sea el de foreground.
+            strcpy(jobs_list[0].cmd,"");
+            jobs_list[0].pid = 0;
+            jobs_list[0].status= 'F';
+        }else if( p_ended == -1){           //En caso de que el proceso no se haya podido enterrar.
+            perror("Fallo al intentar enterrar el proceso");     
+        }else{                              //En caso de que el proceso terminado sea en background.
+            int pos = jobs_list_find(p_ended);
+            printf("\nEl proceso en background [%d] con pid |%d| y cmd |%s| terminó\n",pos, jobs_list[pos].pid,jobs_list[pos].cmd);
+            if(jobs_list_remove(pos)){
+                perror("No se pudo eliminar el trabajo");
             }
-        }else{
-            perror("Proceso no encontrado");
+        }
+        if (WIFEXITED(status)){
+            printf("Child finished his work by exit: result of exit: %d and pid is:%d\n", WEXITSTATUS(status), p_ended);
+        }
+        else if (WIFSIGNALED(status)){
+            printf("Child finished his process by a signal: result of signal: %d and pid is: %d\n", WTERMSIG(status), p_ended);
         }
     }
 }
@@ -330,9 +373,8 @@ void ctrlc(int signum){
     signal(SIGINT,ctrlc);
     printf("Soy el proceso con pid %d, el proceso en foreground es %d\n",getpid(),jobs_list[0].pid);
     if (jobs_list[0].pid > 0){
-        printf("\nss%svs%sss\n",PROGNAME, jobs_list[0].cmd);
-        printf("%d\n",strcmp(PROGNAME,jobs_list[0].cmd));
         if (strcmp(PROGNAME,jobs_list[0].cmd) != 0){
+            printf("El proceso %d ha muerto, su cmd era: %s\n",jobs_list[0].pid, jobs_list[0].cmd);
             kill(jobs_list[0].pid,SIGTERM);
         }else{
             perror("Señal SIGTERM no enviada debido a que el proceso en foreground es el shell");
@@ -347,6 +389,7 @@ void ctrlz(int signum){
     signal(SIGTSTP,ctrlz);
     if (jobs_list[0].pid > 0 && strcmp(jobs_list[0].cmd,PROGNAME) != 0){                 //Si el proceso esta en foreground
         kill(jobs_list[0].pid, SIGSTOP);
+        strcat(jobs_list[0].cmd," &");
         jobs_list_add(jobs_list[0].pid,'D',jobs_list[0].cmd);
         strcpy(jobs_list[0].cmd,"");
         jobs_list[0].pid = 0;
@@ -360,48 +403,48 @@ void ctrlz(int signum){
 
 int is_background(char **args, int *numOfElements){
     int isbkg = 0;
-    if (strcmp(args[*numOfElements -1],"&") == 0){
+    if (strcmp(args[*(numOfElements)-1],"&") == 0){
         isbkg = 1;
-        args[*numOfElements -1] = NULL;
-        *numOfElements = *numOfElements-1;
+        *(numOfElements) = *(numOfElements) -1;
+        args[*numOfElements] = NULL;
     }
     return isbkg;
 }
 
 int jobs_list_add(pid_t pid, char status, char *cmd){
-    struct info_process job;
-    job.pid= pid;
-    job.status = status;
-    strcpy(job.cmd,cmd);
-    if (n_pids < N_JOBS){
+    if (n_pids < N_JOBS){                           //Mientras no se llegue al maximo de jobs permitidos
+        struct info_process job;
+        strcpy(job.cmd,cmd);
+        job.pid = pid;
+        job.status = status;
         jobs_list[n_pids] = job;
         n_pids++;
+        return 0;
     }else{
-        perror("Se ha llegado a la capacidad máxima de procesos permitidos");
+        perror("Se ha llegado al límite de jobs");
+        return 1;
     }
+    
 }
 
 int jobs_list_find(pid_t pid){
-    int position = 0;
-    for(int i = 0; i < n_pids && jobs_list[position].pid != pid; i++){
-        position = i;
+    for (size_t i = 1; i <= n_pids; i++){
+        if (jobs_list[i].pid == pid){
+            return i;
+        }
     }
-    if (jobs_list[position].pid == pid){                        //Si el bucle ha parado porque son iguales,
-        return position;                                        //entonces devolvemos la posición
-    }else{                                                      //Sinó  es que el proceso no se ha encontrado.
-        return -1;
-    }
+    return -1;
 }
 
 int jobs_list_remove(int pos){
-    if (pos > n_pids || pos < 1){
-        perror("No existe el proceso en la lista de jobs");
-        return EXIT_FAILURE;
-    }else{
-        jobs_list[pos] = jobs_list[n_pids];
+    if (pos < n_pids && pos > 0){
+        jobs_list[pos].pid = jobs_list[n_pids-1].pid;
+        jobs_list[pos].status = jobs_list[n_pids-1].status;
+        strcpy(jobs_list[pos].cmd,jobs_list[n_pids-1].cmd);
         n_pids--;
-        return EXIT_SUCCESS;
+        return 0;
+    }else{
+        perror("No se ha podido eliminar el proceso!");
+        return -1;
     }
-    
-    
 }
