@@ -1,5 +1,5 @@
 //Marc Roman Colom y Laura Cavero Loza
-#include "nivel6.h"
+#include "my_shell.h"
 
 static struct info_process jobs_list[N_JOBS];
 char prompt[COMMAND_LINE_SIZE];
@@ -196,9 +196,9 @@ void advanced_cd(char *path,char **args){
     char *hasDelimiters;
     size_t cntArgs = 1;
     if ((hasDelimiters = strtok(args[cntArgs], ADVCD))){    //Observamos si contiene algun delimitador
-        strcpy(path, hasDelimiters);                //Copiamos la palabra al path
-        if ((hasDelimiters = strtok(NULL, ADVCD))){   //En caso de que la palabra contenga algun otro delimitador, concatenamos
-                                                    //su contenido con lo que hay en el path.
+        strcpy(path, hasDelimiters);                    //Copiamos la palabra al path
+        if ((hasDelimiters = strtok(NULL, ADVCD))){     //En caso de que la palabra contenga algun otro delimitador, concatenamos
+                                                        //su contenido con lo que hay en el path.
             strcat(path, hasDelimiters);
         }
     }

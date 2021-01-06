@@ -1,0 +1,3 @@
+Todas las funciones hacen lo mencionado en la práctica. Incluido bg y fg que se puede hacer uso opcional de %.
+El prompt está pensado para que cuando un cmd o acción no se realice con el shell cambie el color a rojo. En caso de que la acción se haya realizado correctamente se pondrá en verde.
+Cabe añadir que la total funcionalidad del prompt aparece en el nivel6 y my_shell, por lo que no te preocupes si en alguna ejecución del resto de niveles falla el color del prompt.
